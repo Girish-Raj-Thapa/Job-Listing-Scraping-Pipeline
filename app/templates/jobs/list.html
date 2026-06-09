@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Jobs{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="section-head">
+      <h2>Latest Jobs</h2>
+      <details class="download-menu">
+        <summary>Download</summary>
+        <div class="download-options">
+          <a class="download-option" href="{{ export_csv_url }}">CSV</a>
+          <a class="download-option" href="{{ export_xlsx_url }}">Excel</a>
+        </div>
+      </details>
+    </div>
+    {% if job_type_chips %}
+      <div class="quick-filter-block">
+        <p class="quick-filter-title">Quick Job Types</p>
+        <div class="chip-row">
+          {% for chip in job_type_chips %}
+            <a class="filter-chip {% if chip.active %}active{% endif %}" href="{{ chip.url }}">{{ chip.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if tag_chips %}
+      <div class="quick-filter-block">
+        <p class="quick-filter-title">Quick Tags</p>
+        <div class="chip-row">
+          {% for chip in tag_chips %}
+            <a class="filter-chip {% if chip.active %}active{% endif %}" href="{{ chip.url }}">{{ chip.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <form method="get" action="/jobs" class="filter-form">
+      <div class="filter-grid">
+        <label>
+          <span>Keyword</span>
+          <input type="text" name="keyword" value="{{ filter_values.keyword }}" placeholder="Backend, Python, Designer" />
+        </label>
+        <label>
+          <span>Location</span>
+          <input type="text" name="location" value="{{ filter_values.location }}" placeholder="Berlin, Remote" />
+        </label>
+        <label>
+          <span>Source</span>
+          <select name="source">
+            <option value="">All sources</option>
+            {% for option in source_options %}
+              <option value="{{ option }}" {% if filter_values.source == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Remote Type</span>
+          <select name="remote">
+            <option value="">All modes</option>
+            {% for option in remote_options %}
+              <option value="{{ option }}" {% if filter_values.remote == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Job Type</span>
+          <select name="job_type">
+            <option value="">All types</option>
+            {% for option in job_type_options %}
+              <option value="{{ option }}" {% if filter_values.job_type == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Tag / Topic</span>
+          <input
+            type="text"
+            name="tag"
+            value="{{ filter_values.tag }}"
+            list="tag-options"
+            placeholder="Engineering, Python, React"
+          />
+          <datalist id="tag-options">
+            {% for option in tag_options %}
+              <option value="{{ option }}"></option>
+            {% endfor %}
+          </datalist>
+        </label>
+      </div>
+      <div class="filter-actions">
+        <button type="submit">Apply Filters</button>
+        <a class="text-link" href="/jobs">Clear</a>
+      </div>
+    </form>
+    <p class="table-meta">
+      Showing {{ start_row }}-{{ end_row }} of {{ total_jobs }} jobs
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Title</th>
+          <th>Company</th>
+          <th>Location</th>
+          <th>Source</th>
+          <th>Job Type</th>
+          <th>Tags</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in jobs %}
+          <tr>
+            <td>{{ job.id }}</td>
+            <td>{{ job.title }}</td>
+            <td>{{ job.company or "-" }}</td>
+            <td>{{ job.location or "-" }}</td>
+            <td>{{ job.source }}</td>
+            <td>{{ job.job_type or "-" }}</td>
+            <td>{{ ", ".join(job.tags or []) or "-" }}</td>
+            <td><a class="text-link" href="{{ job.job_url }}" target="_blank" rel="noreferrer">Open</a></td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="8">No jobs matched the current filters.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="pagination">
+      {% if has_prev %}
+        <a class="page-link" href="{{ prev_url }}">Previous</a>
+      {% else %}
+        <span class="page-link disabled">Previous</span>
+      {% endif %}
+
+      <span class="page-status">Page {{ current_page }} of {{ total_pages }}</span>
+
+      {% if has_next %}
+        <a class="page-link" href="{{ next_url }}">Next</a>
+      {% else %}
+        <span class="page-link disabled">Next</span>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

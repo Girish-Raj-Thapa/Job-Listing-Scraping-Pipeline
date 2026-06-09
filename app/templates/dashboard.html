@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <div>
+      <p class="eyebrow">Overview</p>
+      <h2>Track scraping runs and inspect ingestion health.</h2>
+    </div>
+  </section>
+
+  <section class="card-grid">
+    <article class="card accent-card">
+      <p class="card-label">Total Jobs</p>
+      <p class="metric">{{ jobs_count }}</p>
+    </article>
+    <article class="card">
+      <p class="card-label">Configured Sources</p>
+      <p class="metric">{{ sources|length }}</p>
+    </article>
+    <article class="card">
+      <p class="card-label">Recent Scrapes</p>
+      <p class="metric">{{ recent_scrapes|length }}</p>
+    </article>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h3>Sources</h3>
+      <a class="text-link" href="/sources">Manage</a>
+    </div>
+    <ul class="source-list">
+      {% for source in sources %}
+        <li>
+          <span>{{ source.name }}</span>
+          <span class="pill">{{ source.type.value if source.type else source.type }}</span>
+        </li>
+      {% else %}
+        <li>No sources configured yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h3>Recent Scrape Jobs</h3>
+      <a class="text-link" href="/scrapes">View all</a>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Source ID</th>
+          <th>Status</th>
+          <th>Found</th>
+          <th>Saved</th>
+          <th>Duplicates</th>
+          <th>Errors</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in recent_scrapes %}
+          <tr>
+            <td>{{ item.id }}</td>
+            <td>{{ item.source_id }}</td>
+            <td>{{ item.status.value if item.status else item.status }}</td>
+            <td>{{ item.total_found }}</td>
+            <td>{{ item.total_saved }}</td>
+            <td>{{ item.total_duplicates }}</td>
+            <td>{{ item.error_count }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="7">No scrape runs yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Sources{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <h2>Sources</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Base URL</th>
+          <th>Active</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for source in sources %}
+          <tr>
+            <td>{{ source.name }}</td>
+            <td>{{ source.type.value if source.type else source.type }}</td>
+            <td>{{ source.base_url }}</td>
+            <td>{{ source.is_active }}</td>
+            <td>
+              <form method="post" action="/sources/{{ source.name }}/run">
+                <button type="submit">Run</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="5">No sources configured yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

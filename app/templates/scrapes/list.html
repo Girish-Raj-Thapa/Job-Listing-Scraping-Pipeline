@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Scrapes{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <h2>Scrape Runs</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Source ID</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Finished</th>
+          <th>Found</th>
+          <th>Saved</th>
+          <th>Duplicates</th>
+          <th>Errors</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in scrapes %}
+          <tr>
+            <td>{{ item.id }}</td>
+            <td>{{ item.source_id }}</td>
+            <td>{{ item.status.value if item.status else item.status }}</td>
+            <td>{{ item.started_at or "-" }}</td>
+            <td>{{ item.finished_at or "-" }}</td>
+            <td>{{ item.total_found }}</td>
+            <td>{{ item.total_saved }}</td>
+            <td>{{ item.total_duplicates }}</td>
+            <td>{{ item.error_count }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="9">No scrape jobs yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}
