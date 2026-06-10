@@ -100,7 +100,14 @@ def jobs_page(
     end_row = min(offset + len(jobs), total_jobs)
 
     sources = db.query(ScrapeSource).order_by(ScrapeSource.name.asc()).all()
-    source_options = [item.name for item in sources]
+    source_options = [
+        {
+            "value": item.name,
+            "label": item.display_name or item.name,
+        }
+        for item in sources
+    ]
+    source_label_map = {item.name: item.display_name or item.name for item in sources}
     remote_options = ["onsite", "remote"]
     job_type_options = db.execute(
         select(JobListing.job_type)
@@ -182,6 +189,7 @@ def jobs_page(
         {
             "request": request,
             "jobs": jobs,
+            "source_label_map": source_label_map,
             "current_page": current_page,
             "total_pages": total_pages,
             "page_size": page_size,

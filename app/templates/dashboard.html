@@ -33,7 +33,7 @@
     <ul class="source-list">
       {% for source in sources %}
         <li>
-          <span>{{ source.name }}</span>
+          <span>{{ source.display_name or source.name }}</span>
           <span class="pill">{{ source.type.value if source.type else source.type }}</span>
         </li>
       {% else %}
@@ -51,7 +51,7 @@
       <thead>
         <tr>
           <th>ID</th>
-          <th>Source ID</th>
+          <th>Source</th>
           <th>Status</th>
           <th>Found</th>
           <th>Saved</th>
@@ -63,7 +63,13 @@
         {% for item in recent_scrapes %}
           <tr>
             <td>{{ item.id }}</td>
-            <td>{{ item.source_id }}</td>
+            <td>
+              {% if item.source %}
+                {{ item.source.display_name or item.source.name }}
+              {% else %}
+                {{ item.source_id }}
+              {% endif %}
+            </td>
             <td>{{ item.status.value if item.status else item.status }}</td>
             <td>{{ item.total_found }}</td>
             <td>{{ item.total_saved }}</td>

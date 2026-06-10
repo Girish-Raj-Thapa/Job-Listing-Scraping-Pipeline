@@ -35,6 +35,23 @@ services:
       redis:
         condition: service_healthy
 
+  beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: job_scraper_beat
+    command: ["beat"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:16
     container_name: job_scraper_postgres

@@ -51,7 +51,7 @@
           <select name="source">
             <option value="">All sources</option>
             {% for option in source_options %}
-              <option value="{{ option }}" {% if filter_values.source == option %}selected{% endif %}>{{ option }}</option>
+              <option value="{{ option.value }}" {% if filter_values.source == option.value %}selected{% endif %}>{{ option.label }}</option>
             {% endfor %}
           </select>
         </label>
@@ -117,7 +117,7 @@
             <td>{{ job.title }}</td>
             <td>{{ job.company or "-" }}</td>
             <td>{{ job.location or "-" }}</td>
-            <td>{{ job.source }}</td>
+            <td>{{ source_label_map.get(job.source, job.source) }}</td>
             <td>{{ job.job_type or "-" }}</td>
             <td>{{ ", ".join(job.tags or []) or "-" }}</td>
             <td><a class="text-link" href="{{ job.job_url }}" target="_blank" rel="noreferrer">Open</a></td>

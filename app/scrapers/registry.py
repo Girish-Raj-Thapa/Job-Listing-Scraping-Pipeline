@@ -1,18 +1,21 @@
+from app.models.scrape_source import ScrapeSource
+from app.scrapers.ashby import AshbySource
 from app.scrapers.arbeitnow import ArbeitnowSource
 from app.scrapers.base import BaseJobSource
+from app.scrapers.greenhouse import GreenhouseSource
+from app.scrapers.lever import LeverSource
 
 
-def get_source_by_name(name: str) -> BaseJobSource:
-    sources = {
-        "arbeitnow": ArbeitnowSource,
-    }
+def get_source_for_record(source: ScrapeSource) -> BaseJobSource:
+    url = source.base_url.lower()
 
-    try:
-        return sources[name]()
-    except KeyError as exc:
-        raise ValueError(f"Unsupported source: {name}") from exc
+    if "arbeitnow.com" in url:
+        return ArbeitnowSource(source)
+    if "boards-api.greenhouse.io" in url:
+        return GreenhouseSource(source)
+    if "api.lever.co" in url:
+        return LeverSource(source)
+    if "api.ashbyhq.com" in url:
+        return AshbySource(source)
 
-
-def get_supported_sources() -> list[str]:
-    return ["arbeitnow"]
-    
+    raise ValueError(f"Unsupported source: {source.name}")

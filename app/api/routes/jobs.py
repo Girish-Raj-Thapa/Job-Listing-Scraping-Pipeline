@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.job_listing import JobListing
+from app.models.scrape_source import ScrapeSource
 
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
@@ -78,11 +79,17 @@ def list_jobs(
     return jobs
 
 
-def get_export_rows(jobs: list[JobListing]) -> list[list[object]]:
+def get_source_display_map(db: Session) -> dict[str, str]:
+    sources = db.execute(select(ScrapeSource)).scalars().all()
+    return {source.name: source.display_name or source.name for source in sources}
+
+
+def get_export_rows(jobs: list[JobListing], source_display_map: dict[str, str]) -> list[list[object]]:
     return [
         [
             job.id,
             job.source,
+            source_display_map.get(job.source, job.source),
             job.external_id,
             job.title,
             job.company,
@@ -101,7 +108,8 @@ def get_export_rows(jobs: list[JobListing]) -> list[list[object]]:
 def get_export_headers() -> list[str]:
     return [
         "id",
-        "source",
+        "source_key",
+        "source_name",
         "external_id",
         "title",
         "company",
@@ -140,11 +148,12 @@ def export_jobs_csv(
         posted_before=posted_before,
     )
     jobs = db.execute(stmt).scalars().all()
+    source_display_map = get_source_display_map(db)
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(get_export_headers())
-    writer.writerows(get_export_rows(jobs))
+    writer.writerows(get_export_rows(jobs, source_display_map))
 
     output.seek(0)
     return StreamingResponse(
@@ -179,13 +188,14 @@ def export_jobs_excel(
         posted_before=posted_before,
     )
     jobs = db.execute(stmt).scalars().all()
+    source_display_map = get_source_display_map(db)
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Jobs"
     sheet.append(get_export_headers())
 
-    for row in get_export_rows(jobs):
+    for row in get_export_rows(jobs, source_display_map):
         sheet.append(row)
 
     output = io.BytesIO()

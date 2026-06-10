@@ -9,7 +9,7 @@
       <thead>
         <tr>
           <th>ID</th>
-          <th>Source ID</th>
+          <th>Source</th>
           <th>Status</th>
           <th>Started</th>
           <th>Finished</th>
@@ -23,7 +23,13 @@
         {% for item in scrapes %}
           <tr>
             <td>{{ item.id }}</td>
-            <td>{{ item.source_id }}</td>
+            <td>
+              {% if item.source %}
+                {{ item.source.display_name or item.source.name }}
+              {% else %}
+                {{ item.source_id }}
+              {% endif %}
+            </td>
             <td>{{ item.status.value if item.status else item.status }}</td>
             <td>{{ item.started_at or "-" }}</td>
             <td>{{ item.finished_at or "-" }}</td>

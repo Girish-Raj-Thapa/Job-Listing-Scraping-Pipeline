@@ -45,6 +45,10 @@ def ingest_normalized_jobs(db: Session, jobs: list[dict]) -> IngestionResult:
                 if duplicate.source == validated.source:
                     refreshed = False
 
+                    if validated.company and duplicate.company != validated.company:
+                        duplicate.company = validated.company
+                        refreshed = True
+
                     if validated.job_type and duplicate.job_type != validated.job_type:
                         duplicate.job_type = validated.job_type
                         refreshed = True

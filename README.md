@@ -2,24 +2,25 @@
 
 Job listings ingestion pipeline built with FastAPI, Celery, Redis, PostgreSQL, SQLAlchemy, Alembic, and Jinja.
 
-The current MVP supports:
+It currently supports:
 
-- scraping jobs from `Arbeitnow`
-- normalizing raw source data into one internal schema
-- validating jobs with Pydantic before insert
-- deduplicating jobs before save
-- storing scrape runs, jobs, and scrape errors in PostgreSQL
-- triggering scraping in the background with Celery
-- listing jobs through JSON API endpoints
-- exporting jobs as CSV and Excel
-- filtering jobs by keyword, source, location, remote type, job type, and tag/topic
-- paginating jobs in the Jinja UI
-- viewing jobs and scrape runs in a basic Jinja UI
+- multi-source job ingestion from public job APIs
+- source-specific normalization into one internal schema
+- Pydantic validation before insert
+- multi-step deduplication
+- background scraping with Celery workers
+- scheduled scraping with Celery Beat plus per-source DB schedule settings
+- source-specific rate limits, timeouts, and retry policy
+- PostgreSQL persistence for sources, scrape runs, jobs, and errors
+- JSON API endpoints
+- Jinja UI for jobs, scrapes, and sources
+- filtered CSV and Excel exports
 
 ## Stack
 
 - Backend: FastAPI
 - Worker: Celery
+- Scheduler: Celery Beat
 - Queue: Redis
 - Database: PostgreSQL
 - ORM: SQLAlchemy 2
@@ -29,33 +30,35 @@ The current MVP supports:
 - UI: Jinja templates
 - Containers: Docker Compose
 
-## Current Source Support
+## Current Sources
+
+The current project uses public structured job endpoints:
 
 - `arbeitnow`
+- `greenhouse-stripe`
+- `greenhouse-cloudflare`
+- `lever-demo`
+- `ashby-openai`
+- `ashby-cursor`
 
-Planned later:
+Readable source metadata is stored in the database, so the app can keep stable internal source keys while showing cleaner labels such as `OpenAI (Ashby)` and `Stripe (Greenhouse)` in the UI and exports.
 
-- USAJOBS
-- Adzuna
-- HTML source scraping
-- Playwright-based browser scraping
+## Pipeline Flow
 
-## How The Pipeline Works
-
-The scraping flow is:
+Manual trigger flow:
 
 ```text
 POST /api/v1/sources/{source_name}/run
         ↓
 Create scrape_jobs row with status = pending
         ↓
-Queue Celery task
+Queue Celery task in Redis
         ↓
-Worker loads the scraper for that source
+Worker loads the correct source adapter
         ↓
 Fetch raw jobs from external source
         ↓
-Normalize each job into project schema
+Normalize into internal schema
         ↓
 Validate with Pydantic
         ↓
@@ -63,31 +66,39 @@ Build content hash
         ↓
 Check duplicates
         ↓
-Save new jobs
+Insert only new jobs
         ↓
-Update scrape_jobs counters and status
+Update scrape_jobs totals and status
 ```
 
-### Step-by-step in code
+Scheduled flow:
 
-1. Request hits `app/api/routes/sources.py`.
-2. `create_scrape_job()` in `app/services/scrape_runner.py` creates a `scrape_jobs` row with `pending`.
-3. `scrape_source_task.delay(...)` sends the task to Redis.
-4. Celery worker receives the task in `app/tasks/scraping.py`.
-5. Worker calls `run_scrape_for_source(...)` in `app/services/scrape_runner.py`.
-6. The source adapter is loaded from `app/scrapers/registry.py`.
-7. `ArbeitnowSource.fetch_jobs()` requests the remote API in `app/scrapers/arbeitnow.py`.
-8. `ArbeitnowSource.normalize()` converts each raw record into the project’s internal shape.
-9. `ingest_normalized_jobs(...)` in `app/services/ingestion.py` validates each job with `JobListingCreate`.
-10. A content hash is generated in `app/services/dedup.py`.
-11. `find_duplicate_job(...)` in `app/services/repository.py` checks if the job already exists.
-12. New jobs are inserted into `job_listings`.
-13. `scrape_jobs` is updated with totals for found, saved, duplicates, and errors.
-14. If something fails, a row is written to `scrape_errors`.
+```text
+Celery Beat poll
+        ↓
+scrape_due_sources_task
+        ↓
+Read source schedule settings from PostgreSQL
+        ↓
+Decide which sources are due
+        ↓
+Queue scrape_source_task per due source
+```
+
+## Scheduling Model
+
+The schedule model is intentionally split:
+
+- Celery Beat wakes up on a fixed poll interval from config: `BEAT_POLL_INTERVAL_MINUTES`
+- each source stores its own schedule rules in PostgreSQL:
+  - `schedule_enabled`
+  - `schedule_interval_hours`
+
+This means scheduling behavior is effectively database-driven without needing a full custom Beat backend.
 
 ## Deduplication Strategy
 
-The project currently deduplicates using three checks:
+Jobs are deduplicated in this order:
 
 1. same `source + external_id`
 2. same `source + job_url`
@@ -99,24 +110,43 @@ The content hash is built from normalized values:
 title + company + location + job_url
 ```
 
-Whitespace and casing are normalized before hashing.
+The normalization layer lowercases and trims these values before hashing.
+
+## Source Runtime Controls
+
+Each `scrape_sources` row also stores runtime controls:
+
+- `rate_limit_seconds`
+- `request_timeout_seconds`
+- `max_retries`
+- `retry_backoff_seconds`
+
+Transient failures such as network issues, `429`, or `5xx` responses are treated as retryable. Terminal failures are written to `scrape_errors`.
 
 ## Database Tables
 
 ### `scrape_sources`
 
-Stores each supported source.
+Stores source config and runtime behavior.
 
 - `id`
 - `name`
+- `display_name`
+- `company_name`
 - `type`
 - `base_url`
 - `is_active`
+- `schedule_enabled`
+- `schedule_interval_hours`
+- `rate_limit_seconds`
+- `request_timeout_seconds`
+- `max_retries`
+- `retry_backoff_seconds`
 - `created_at`
 
 ### `scrape_jobs`
 
-Stores each scrape run.
+Stores each scraping run.
 
 - `id`
 - `source_id`
@@ -153,7 +183,7 @@ Stores normalized jobs.
 
 ### `scrape_errors`
 
-Stores failures during a scrape run.
+Stores failures during scrape execution.
 
 - `id`
 - `scrape_job_id`
@@ -183,7 +213,7 @@ docker/
 migrations/
 ```
 
-## Local Run
+## Run Locally
 
 ### 1. Start services
 
@@ -198,16 +228,18 @@ make ps
 make health
 ```
 
-### 3. Create migration
-
-```bash
-make revision ALEMBIC_MSG="create initial tables"
-```
-
-### 4. Apply migration
+### 3. Run migrations
 
 ```bash
 make upgrade
+```
+
+### 4. Inspect logs
+
+```bash
+make logs-api
+make logs-worker
+make logs-beat
 ```
 
 ## Useful Make Commands
@@ -221,11 +253,15 @@ make ps
 make logs
 make logs-api
 make logs-worker
+make logs-beat
 make shell-api
 make shell-db
 make revision ALEMBIC_MSG="add new field"
 make upgrade
 make current
+make scrape-all
+make scrape-due
+make health
 ```
 
 ## API Endpoints
@@ -241,7 +277,7 @@ make current
 - `GET /api/v1/jobs/export.csv`
 - `GET /api/v1/jobs/export.xlsx`
 
-Supported filters on `GET /api/v1/jobs`:
+Supported filters:
 
 - `keyword`
 - `company`
@@ -252,6 +288,11 @@ Supported filters on `GET /api/v1/jobs`:
 - `tag`
 - `posted_after`
 - `posted_before`
+
+Exports include both:
+
+- `source_key`
+- `source_name`
 
 ### Scrape Jobs
 
@@ -272,90 +313,85 @@ Server-rendered pages:
 - `/scrapes`
 - `/sources`
 
-Use `/sources` to manually trigger a scrape from the browser.
-
 The `/jobs` page currently includes:
 
 - 10-row pagination
 - quick filter chips for common job types
-- quick filter chips for common tags/topics
+- quick filter chips for common tags
 - filter form for exact filtering
-- a `Download` menu with CSV and Excel export
+- filtered CSV and Excel export through one `Download` menu
 
-## Manual Verification Flow
+The `/sources` page shows:
 
-Use this sequence to test the current MVP:
+- source key and display name
+- default company label
+- schedule settings
+- rate limits
+- retry config
+- manual run button
 
-### 1. Confirm app is up
+## Manual Verification
+
+Use this order for a quick system check.
+
+### 1. Infrastructure
 
 ```bash
-make up
 make ps
 make health
+make logs-api
+make logs-worker
+make logs-beat
 ```
 
-### 2. Confirm seeded sources
+### 2. Source config
 
 ```bash
 curl http://localhost:8001/api/v1/sources
 ```
 
-Expected:
+Check that each source has:
 
-- one source named `arbeitnow`
+- display metadata
+- schedule settings
+- retry config
+- rate limit config
 
-### 3. Trigger a scrape
-
-```bash
-curl -X POST http://localhost:8001/api/v1/sources/arbeitnow/run
-```
-
-### 4. Watch worker logs
+### 3. Manual source run
 
 ```bash
-make logs-worker
-```
-
-### 5. Check scrape status
-
-```bash
+curl -X POST http://localhost:8001/api/v1/sources/ashby-openai/run
 curl http://localhost:8001/api/v1/scrape-jobs
 ```
 
-### 6. Check saved jobs
+### 4. Scheduled due check
 
 ```bash
-curl http://localhost:8001/api/v1/jobs
+make scrape-due
 ```
 
-### 7. Test deduplication
+Recently scraped sources should be skipped with `not_due_yet`.
 
-Run the same scrape again:
+### 5. Jobs and filters
 
 ```bash
-curl -X POST http://localhost:8001/api/v1/sources/arbeitnow/run
+curl "http://localhost:8001/api/v1/jobs?source=ashby-openai"
+curl "http://localhost:8001/api/v1/jobs?job_type=Full-time"
+curl "http://localhost:8001/api/v1/jobs?tag=Engineering"
 ```
 
-Expected:
-
-- `total_duplicates` should increase
-- job rows should not be inserted twice
-
-### 8. Test filtered exports
+### 6. Exports
 
 ```bash
 curl -OJ http://localhost:8001/api/v1/jobs/export.csv
-curl -OJ "http://localhost:8001/api/v1/jobs/export.xlsx?job_type=Freelance"
+curl -OJ "http://localhost:8001/api/v1/jobs/export.xlsx?source=ashby-openai"
 ```
 
-Both export endpoints support the same filters as `GET /api/v1/jobs`.
-If you export from the `/jobs` page, the active filters are preserved automatically.
-
-## DBeaver / PostgreSQL Access
+## PostgreSQL / DBeaver Access
 
 The database is exposed on host port `5438`.
 
-Use these settings:
+Use:
 
 - Host: `localhost`
 - Port: `5438`
@@ -363,47 +399,39 @@ Use these settings:
 - Username: `jobs_user`
 - Password: `jobs_password`
 
-## Important Implementation Notes
-
-- Scrapers do not write to the database directly.
-- Validation happens before database insert.
-- Deduplication happens in service code before insert.
-- Celery runs the scrape asynchronously so the API returns quickly.
-- The API and worker both wait for PostgreSQL availability through the Docker startup scripts.
-- `Arbeitnow` `created_at` currently comes as a Unix timestamp, so the scraper explicitly handles integer timestamps.
-
 ## Current Status
 
-What is already working:
+Working now:
 
-- Dockerized app, worker, Redis, and PostgreSQL
+- Dockerized API, worker, beat, Redis, and PostgreSQL
 - Alembic migration workflow
-- Arbeitnow scraping
-- background job execution with Celery
+- multiple API job sources
+- source-specific metadata in DB
+- source-specific schedules in DB
+- source-specific rate limits and retry policy in DB
+- background scraping with Celery
+- scheduled due-check with Celery Beat
 - validation and deduplication
 - job persistence
+- scrape run tracking
 - JSON API endpoints
-- CSV export route
-- Excel export route
+- CSV and Excel export
 - filtered exports
-- pagination in the jobs UI
-- filter UI with job type and tag/topic grouping
-- Jinja pages
+- Jinja UI with pagination and filtering
 
-What still needs work:
+Not done yet:
 
-- second data source
+- real HTML scraping
+- Playwright-based browser scraping
 - automated tests
-- README screenshots / architecture diagram
-- stronger error reporting and observability
-- scheduled scraping
+- observability stack like Grafana/Loki
+- richer admin/dashboard analytics
 
-## Next Planned Improvements
+## Next Recommended Step
 
-- add USAJOBS source
-- add tests with `pytest`
-- improve source-specific error capture
-- add pagination to jobs API
-- improve export formatting
-- add scheduled scraping with Celery Beat
-- improve dashboard metrics
+The strongest next technical step is adding one real website scraper:
+
+1. one static HTML scraper with `BeautifulSoup`
+2. later one dynamic scraper with `Playwright`
+
+That would move the project from pure API ingestion into true mixed-source scraping.

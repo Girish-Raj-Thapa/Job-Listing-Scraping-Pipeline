@@ -11,6 +11,9 @@ case "$role" in
   worker)
     exec /bin/sh /app/docker/scripts/start-worker.sh "$@"
     ;;
+  beat)
+    exec /bin/sh /app/docker/scripts/start-beat.sh "$@"
+    ;;
   *)
     exec "$role" "$@"
     ;;

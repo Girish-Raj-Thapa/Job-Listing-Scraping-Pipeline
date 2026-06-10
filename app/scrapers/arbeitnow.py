@@ -1,20 +1,14 @@
 from datetime import UTC, datetime
 
-import httpx
-
 from app.scrapers.base import BaseJobSource
 
 
 class ArbeitnowSource(BaseJobSource):
-    name = "arbeitnow"
-    api_url = "https://www.arbeitnow.com/api/job-board-api"
+    platform_name = "arbeitnow"
 
     async def fetch_jobs(self) -> list[dict]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(self.api_url)
-            response.raise_for_status()
-            payload = response.json()
-            return payload.get("data", [])
+        payload = await self._request_json()
+        return payload.get("data", [])
 
     def _parse_posted_at(self, value: object) -> datetime | None:
         if value is None:
@@ -58,10 +52,10 @@ class ArbeitnowSource(BaseJobSource):
             ]
 
         return {
-            "source": self.name,
+            "source": self.source_name,
             "external_id": str(raw.get("slug")) if raw.get("slug") else None,
             "title": raw.get("title", "").strip(),
-            "company": raw.get("company_name"),
+            "company": raw.get("company_name") or self.source_company_name,
             "location": raw.get("location"),
             "remote_type": remote_type,
             "job_type": job_type,

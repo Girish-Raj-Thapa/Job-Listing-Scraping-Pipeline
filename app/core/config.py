@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     debug: bool = True
     log_level: str = "INFO"
     api_port: int = 8001
+    scheduled_scrape_interval_hours: int = 6
+    beat_poll_interval_minutes: int = 15
 
     postgres_db: str = "jobs_db"
     postgres_user: str = "jobs_user"
