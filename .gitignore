@@ -35,3 +35,6 @@ celerybeat-schedule
 dist/
 build/
 *.log
+
+#Celery beat
+celerybeat-schedule

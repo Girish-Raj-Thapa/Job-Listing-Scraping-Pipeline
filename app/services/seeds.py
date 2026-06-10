@@ -89,6 +89,20 @@ def seed_sources(db: Session) -> None:
             "max_retries": 3,
             "retry_backoff_seconds": 15,
         },
+        {
+            "name": "python-org-jobs",
+            "display_name": "Python.org Jobs",
+            "company_name": None,
+            "type": SourceType.html,
+            "base_url": "https://www.python.org/jobs/",
+            "is_active": True,
+            "schedule_enabled": True,
+            "schedule_interval_hours": 24,
+            "rate_limit_seconds": 1,
+            "request_timeout_seconds": 30,
+            "max_retries": 3,
+            "retry_backoff_seconds": 15,
+        },
     ]
 
     for item in defaults:

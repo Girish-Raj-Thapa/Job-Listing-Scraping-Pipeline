@@ -40,9 +40,7 @@ class BaseJobSource:
     def request_timeout_seconds(self) -> int:
         return max(1, self.source.request_timeout_seconds)
 
-    async def _request_json(self, url: str | None = None) -> dict | list:
-        request_url = url or self.base_url
-
+    async def _sleep_for_rate_limit(self) -> None:
         if self.rate_limit_seconds:
             logger.info(
                 "source_rate_limit_wait",
@@ -51,6 +49,11 @@ class BaseJobSource:
             )
             await asyncio.sleep(self.rate_limit_seconds)
 
+    async def _send_get_request(self, url: str | None = None) -> httpx.Response:
+        request_url = url or self.base_url
+
+        await self._sleep_for_rate_limit()
+
         try:
             async with httpx.AsyncClient(
                 timeout=self.request_timeout_seconds,
@@ -58,7 +61,7 @@ class BaseJobSource:
             ) as client:
                 response = await client.get(request_url)
                 response.raise_for_status()
-                return response.json()
+                return response
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
             if status_code == 429 or status_code >= 500:
@@ -72,10 +75,19 @@ class BaseJobSource:
             raise RetryableScrapeError(
                 f"{self.source_name} request failed: {type(exc).__name__}"
             ) from exc
+
+    async def _request_json(self, url: str | None = None) -> dict | list:
+        try:
+            response = await self._send_get_request(url)
+            return response.json()
         except ValueError as exc:
             raise NonRetryableScrapeError(
                 f"{self.source_name} returned invalid JSON"
             ) from exc
+
+    async def _request_text(self, url: str | None = None) -> str:
+        response = await self._send_get_request(url)
+        return response.text
 
     async def fetch_jobs(self) -> list[dict]:
         raise NotImplementedError

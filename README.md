@@ -1,10 +1,10 @@
 # Job Listing Scraping Pipeline
 
-Job listings ingestion pipeline built with FastAPI, Celery, Redis, PostgreSQL, SQLAlchemy, Alembic, and Jinja.
+Job listings ingestion pipeline built with FastAPI, Celery, Redis, PostgreSQL, SQLAlchemy, Alembic, Jinja, `httpx`, and `BeautifulSoup`.
 
 It currently supports:
 
-- multi-source job ingestion from public job APIs
+- multi-source job ingestion from public job APIs and static HTML job pages
 - source-specific normalization into one internal schema
 - Pydantic validation before insert
 - multi-step deduplication
@@ -26,13 +26,13 @@ It currently supports:
 - ORM: SQLAlchemy 2
 - Migrations: Alembic
 - Validation: Pydantic
-- Scraping client: `httpx`
+- Scraping clients: `httpx`, `BeautifulSoup`
 - UI: Jinja templates
 - Containers: Docker Compose
 
 ## Current Sources
 
-The current project uses public structured job endpoints:
+The current project uses a mix of public structured endpoints and static HTML scraping:
 
 - `arbeitnow`
 - `greenhouse-stripe`
@@ -40,8 +40,16 @@ The current project uses public structured job endpoints:
 - `lever-demo`
 - `ashby-openai`
 - `ashby-cursor`
+- `python-org-jobs`
 
 Readable source metadata is stored in the database, so the app can keep stable internal source keys while showing cleaner labels such as `OpenAI (Ashby)` and `Stripe (Greenhouse)` in the UI and exports.
+
+`python-org-jobs` is the first real HTML scraper in the project. It uses:
+
+- listing-page parsing to discover jobs
+- detail-page parsing to enrich each job with description content
+- multi-page pagination across Python.org job listings
+- the same normalization, validation, deduplication, and persistence flow as API sources
 
 ## Pipeline Flow
 
@@ -360,7 +368,7 @@ Check that each source has:
 ### 3. Manual source run
 
 ```bash
-curl -X POST http://localhost:8001/api/v1/sources/ashby-openai/run
+curl -X POST http://localhost:8001/api/v1/sources/python-org-jobs/run
 curl http://localhost:8001/api/v1/scrape-jobs
 ```
 
@@ -375,7 +383,7 @@ Recently scraped sources should be skipped with `not_due_yet`.
 ### 5. Jobs and filters
 
 ```bash
-curl "http://localhost:8001/api/v1/jobs?source=ashby-openai"
+curl "http://localhost:8001/api/v1/jobs?source=python-org-jobs"
 curl "http://localhost:8001/api/v1/jobs?job_type=Full-time"
 curl "http://localhost:8001/api/v1/jobs?tag=Engineering"
 ```
@@ -384,7 +392,7 @@ curl "http://localhost:8001/api/v1/jobs?tag=Engineering"
 
 ```bash
 curl -OJ http://localhost:8001/api/v1/jobs/export.csv
-curl -OJ "http://localhost:8001/api/v1/jobs/export.xlsx?source=ashby-openai"
+curl -OJ "http://localhost:8001/api/v1/jobs/export.xlsx?source=python-org-jobs"
 ```
 
 ## PostgreSQL / DBeaver Access
@@ -406,6 +414,8 @@ Working now:
 - Dockerized API, worker, beat, Redis, and PostgreSQL
 - Alembic migration workflow
 - multiple API job sources
+- real static HTML scraping with Python.org Jobs
+- multi-page HTML pagination on Python.org Jobs
 - source-specific metadata in DB
 - source-specific schedules in DB
 - source-specific rate limits and retry policy in DB
@@ -421,7 +431,6 @@ Working now:
 
 Not done yet:
 
-- real HTML scraping
 - Playwright-based browser scraping
 - automated tests
 - observability stack like Grafana/Loki
@@ -429,9 +438,10 @@ Not done yet:
 
 ## Next Recommended Step
 
-The strongest next technical step is adding one real website scraper:
+The strongest next technical step is adding one browser-rendered scraper:
 
-1. one static HTML scraper with `BeautifulSoup`
-2. later one dynamic scraper with `Playwright`
+1. keep the current API + static HTML mix
+2. add one dynamic scraper with `Playwright`
+3. then add proxy hooks or richer admin/monitoring features
 
-That would move the project from pure API ingestion into true mixed-source scraping.
+That would move the project from API + static HTML scraping into full mixed-source scraping, including modern JS-rendered job sites.
